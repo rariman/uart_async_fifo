@@ -5,7 +5,23 @@
 #include <zephyr/logging/log.h>
 #include <string.h>
 
+#include <zephyr/sys/sys_heap.h>
+
 LOG_MODULE_REGISTER(uart_async_fifo, LOG_LEVEL_DBG);
+
+extern struct sys_heap _sys_heap;
+
+void print_heap_stats(void)
+{
+    struct sys_memory_stats stats;
+    int ret = sys_heap_runtime_stats_get(&_sys_heap, &stats);
+    if (ret == 0) {
+        LOG_INF("Heap stats: allocated_bytes=%zu, free=%zu, max_allocated_bytes=%zu",
+                 stats.allocated_bytes, stats.free_bytes, stats.max_allocated_bytes);
+    } else {
+        LOG_ERR("Failed to get heap stats: %d", ret);
+    }
+}
 
 /* FIFO item */
 struct uart_item {
@@ -54,6 +70,8 @@ static void button_pressed_isr(const struct device *dev, struct gpio_callback *c
         k_free(item);
     }
     gpio_pin_set_dt(&led_1, 0);
+
+    print_heap_stats();
 }
 
 /* Callback UART */
@@ -86,6 +104,8 @@ static void uart_cb(const struct device *dev, struct uart_event *evt, void *user
                 item->data[rx_pos] = '\0';
                 LOG_DBG("Putting item into FIFO @ %p: %.*s", item, (int)item->len, item->data);
                 k_fifo_put(&uart_fifo, item);
+
+                print_heap_stats();
 
                 rx_pos = 0;
                 uart_rx_disable(uart_dev);
